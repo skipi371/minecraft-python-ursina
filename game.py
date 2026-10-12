@@ -136,29 +136,11 @@ class Iron(Button):
         )
         self.breakable = breakable
         blocks.append(self)
-
+        if block.collider(Iron):
+            blocks.remove(block)
 # --- CORRECTION DES CLASSES SKYBOX ---
 
 
-
-class tree(Entity):
-    def __init__(self, position=(0,0,0)):
-        super().__init__(
-            parent=scene,
-            position=position,
-            model="Asset/Models/Lowpoly_tree_sample.obj",
-            scale=(0.5, 0.5, 0.5),
-            collider="mesh"
-        )
-
-def generate_trees(num_trees=3, terrain_size=20):
-    for _ in range(num_trees):
-        x = random.randint(0, terrain_size - 1)
-        y = 0
-        z = random.randint(0, terrain_size - 1)
-        tree(position=(x, y, z)) # Instanciation du pixel de l'arbre manquante
-
-# --- FONCTION DE SÉLECTION ---
 
 def input(key):
     global block_pick
@@ -186,7 +168,7 @@ def input(key):
                 Block(position=target, texture=textures[block_pick])
 
 # Génération de la map
-generate_trees()
+
 for z in range(30):
     chance_fer_place = random.randint(0, 10)
     for x in range(30):
@@ -194,7 +176,7 @@ for z in range(30):
         bedrock = Block(position=(x, random.randint(-3, -1), z), texture=textures[5], breakable=True)
         charbon = coal(position=(x, random.randint(-3, -1), z))  
         fer = Iron(position=(x, random.randint(-7, -5), z), texture=textures[7], breakable=False)
-
+        
 player = FirstPersonController(position=(10, 10, 10))
 player.cursor.visible = True
 
@@ -205,3 +187,4 @@ player.cursor.visible = True
 
 if __name__ == "__main__":
     app.run()
+    

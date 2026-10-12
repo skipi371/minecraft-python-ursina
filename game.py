@@ -1,11 +1,16 @@
-from ursina import *
+from ursina import * 
 from ursina.prefabs.first_person_controller import FirstPersonController
 import random  # Ajout de l'import random qui manquait pour random.randint
 changer = 100
 chance_fer_place = 2
-visibility_timer = 0.0
-render_distance = 5
 blocks = []
+block_data = {}
+block_by_position = {}
+NEIGHBOR_OFFSETS = (
+    (1, 0, 0), (-1, 0, 0),
+    (0, 1, 0), (0, -1, 0),
+    (0, 0, 1), (0, 0, -1),
+)
 app = Ursina()
 nb = 0
 def changer_mode(mode):
@@ -42,7 +47,7 @@ class SkyBoxJour(Entity):
 chance_place_coal = random.randint(1,3)
 
 def update():
-    global block_pick, visibility_timer
+    global block_pick
     for i in range(1,6):
         if held_keys[str(i)]:
             block_pick = i
@@ -51,17 +56,6 @@ def update():
         application.quit()
     if player.y <= -15:
         player.position = (10,10,10) # Correction syntaxe position
-
-    visibility_timer += time.dt
-    if visibility_timer >= 0.2:
-        visibility_timer = 0.0
-        max_distance_squared = render_distance ** 2
-
-        for block in blocks:
-            dx = player.x - block.x
-            dy = player.y - block.y
-            dz = player.z - block.z
-            block.enabled = dx * dx + dy * dy + dz * dz <= max_distance_squared
 
 # load all asset
 textures = {
@@ -123,7 +117,7 @@ class coal(Button):
         blocks.append(self)
 
 class Iron(Button):
-    def __init__(self, position=(0, 10, 0), texture=textures[7], breakable=False):
+    def __init__(self, position=(0, 10, 0), texture=textures[7], breakable=True):
         super().__init__(
             parent=scene,
             position=position,
@@ -136,9 +130,39 @@ class Iron(Button):
         )
         self.breakable = breakable
         blocks.append(self)
-        if block.collider(Iron):
-            blocks.remove(block)
-# --- CORRECTION DES CLASSES SKYBOX ---
+
+def adjacent_positions(position):
+    return [
+        (position[0] + dx, position[1] + dy, position[2] + dz)
+        for dx, dy, dz in NEIGHBOR_OFFSETS
+    ]
+
+
+def refresh_block_visibility(positions=None):
+    if positions is None:
+        positions = tuple(block_data)
+
+    for position in positions:
+        block_info = block_data.get(position)
+        exposed = block_info is not None and any(
+            neighbor not in block_data
+            for neighbor in adjacent_positions(position)
+        )
+        existing_block = block_by_position.get(position)
+        if exposed and existing_block is None:
+            block_class, texture, breakable = block_info
+            block_by_position[position] = block_class(
+                position=position,
+                texture=texture,
+                breakable=breakable,
+            )
+        elif not exposed and existing_block is not None:
+            block_by_position.pop(position)
+            if existing_block in blocks:
+                blocks.remove(existing_block)
+            destroy(existing_block)
+
+
 
 
 
@@ -156,26 +180,45 @@ def input(key):
             block = mouse.hovered_entity
             if block.breakable:
                 build_sound.play()
+                position = tuple(round(value) for value in block.position)
+                block_data.pop(position, None)
+                block_by_position.pop(position, None)
                 if block in blocks:
                     blocks.remove(block)
                 destroy(block)
+                refresh_block_visibility(adjacent_positions(position))
 
     elif key == "right mouse down":
         if mouse.hovered_entity and hasattr(mouse.hovered_entity, "breakable"):
             target = mouse.hovered_entity.position + mouse.normal
             if mouse.hovered_entity.breakable:
                 build_sound.play()
-                Block(position=target, texture=textures[block_pick])
+                position = tuple(round(value) for value in target)
+                if position not in block_data:
+                    block_data[position] = (Block, textures[block_pick], True)
+                    refresh_block_visibility(
+                        [position, *adjacent_positions(position)]
+                    )
 
 # Génération de la map
 
 for z in range(30):
-    chance_fer_place = random.randint(0, 10)
     for x in range(30):
-        block = Block(position=(x, random.randint(0, 2), z))
-        bedrock = Block(position=(x, random.randint(-3, -1), z), texture=textures[5], breakable=True)
-        charbon = coal(position=(x, random.randint(-3, -1), z))  
-        fer = Iron(position=(x, random.randint(-7, -5), z), texture=textures[7], breakable=False)
+        surface_y = random.randint(0, 2)
+        position = (x, surface_y, z)
+        block_data[position] = (Block, textures[1], True)
+
+        for depth in range(1, 8):
+            position = (x, surface_y - depth, z)
+            if depth >= 5 and random.random() < 0.08:
+                block_data[position] = (Iron, textures[7], True)
+            elif depth >= 3 and random.random() < 0.15:
+                block_data[position] = (coal, textures[6], True)
+            else:
+                texture = textures[2] if depth <= 2 else textures[5]
+                block_data[position] = (Block, texture, True)
+
+refresh_block_visibility()
         
 player = FirstPersonController(position=(10, 10, 10))
 player.cursor.visible = True
